@@ -1,0 +1,10 @@
+useDynLib(BoostingLVM, .registration=TRUE)
+importFrom(Rcpp, evalCpp)
+importFrom("stats", "qlogis", "cor", "factanal", "optim", "qnorm")
+importFrom("graphics","par","lines")
+
+import("mvtnorm")
+
+export(lvmboost,simdatalvm,cv.lvmboost)
+
+S3method(plot, lvmboost)

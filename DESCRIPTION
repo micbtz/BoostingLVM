@@ -1,0 +1,12 @@
+Package: BoostingLVM
+Type: Package
+Title: Likelihood-based boosting of latent variable models
+Version: 1.0.0
+Date: 2020-10-29
+Author: Who wrote it
+Maintainer: Who to complain to <yourfault@somewhere.net>
+Description: Fits a latent variable model for binary responses by likelihood-based boosting.
+License: GPL-2 | GPL-3
+Depends: R (>= 3.5.0), mvtnorm
+Imports: Rcpp (>= 1.0.5),stats,graphics
+LinkingTo:  mvtnorm, Rcpp, RcppArmadillo, RcppDist
