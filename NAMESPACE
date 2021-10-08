@@ -1,6 +1,6 @@
 useDynLib(BoostingLVM, .registration=TRUE)
 importFrom(Rcpp, evalCpp)
-importFrom("stats", "qlogis", "cor", "factanal", "optim", "qnorm")
+importFrom("stats", "qlogis", "cor", "factanal", "optim", "qnorm","dnorm", "pnorm")
 importFrom("graphics","par","lines")
 
 import("mvtnorm")

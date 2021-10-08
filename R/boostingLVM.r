@@ -1,14 +1,78 @@
 
 
+# probabilities of a probit model
+probs<-function(param,nodes,D)
+{
+  alpha<-param[1:D] # discriminations
+  beta<-param[D+1] # intercepts
+  lp<-matrix(alpha,nrow=1)%*%t(nodes)+beta
+  pnorm(lp)
+}
+
+
+# returns unique patterns of responses and relative frequencies
+reduce_data<-function(data)
+{
+  patterns<-apply(data,1,paste, collapse ="_")
+  tab<-table(patterns)
+  first_patt<-!duplicated(patterns)
+  datared<-as.matrix(data[first_patt,])
+  patterns_unique<-patterns[first_patt]
+  numpatt<-as.matrix(tab[patterns_unique])
+  return(list(data=datared,numpatt=numpatt))
+}
+
+NormalOgiveLik<-function(par,data,D=1,nodes,weights,fixrotat=FALSE)
+{
+  patterns<-apply(data,1,paste, collapse ="_")
+  tab<-table(patterns)
+  first_patt<-!duplicated(patterns)
+  datared<-data[first_patt,]
+  patterns_unique<-patterns[first_patt]
+  numpatt<-as.vector(tab[patterns_unique])
+  
+  n<-nrow(datared)
+  nitems<-ncol(datared)
+  param<-matrix(par,nrow=D+1)
+  
+  if (fixrotat)
+  {
+    uptri<-upper.tri(matrix(NA,D,D))
+    uptri<-cbind(matrix(FALSE,D,nitems-D),uptri)
+    uptri<-rbind(uptri,FALSE)
+    param[uptri]<-0
+  }
+  probs<- apply(param,2, FUN=probs, nodes=nodes, D=D)
+
+  logprodj <- matrix(0, n, nrow(nodes))
+  for (j in 1:nitems) {
+    probsj <- probs[,j]
+    probsj <- rbind(1-probsj, probsj)
+    logprobsj <- log(probsj)
+    xj <- datared[, j]
+    na.ind <- is.na(xj)
+    logprobsj <- logprobsj[xj+1, ]
+    if (any(na.ind))
+      logprobsj[na.ind, ] <- 0
+    logprodj <- logprodj + logprobsj
+  }
+  prodj<-exp(logprodj)
+  sumq <- (prodj %*% weights)
+  mlik <- -sum(log(sumq)*numpatt) # minus log-likelihood
+  mlik
+}
+
+
+
 simdatalvm<-function(n,param,Phi=NULL,type="binary")
 {
   nitems<-ncol(param)
   D<-nrow(param)-1
   if (is.null(Phi)) Phi<-diag(1,D)
-  lambda<-t(param[1:D,])
-  if (D==1) lambda<-t(lambda)
+  Lambda<-t(param[1:D,])
+  if (D==1) Lambda<-t(Lambda)
   thresholds<-param[D+1,]
-  vary<-lambda%*%Phi%*%t(lambda)
+  vary<-Lambda%*%Phi%*%t(Lambda)
   if (any(diag(vary)>1)) stop("variance of y greater than 1")
   diag(vary)<-1
   ys<-rmvnorm(n=n,mean=rep(0,nitems),sigma=vary)
@@ -19,7 +83,7 @@ simdatalvm<-function(n,param,Phi=NULL,type="binary")
   y
 }
 
-fa2<-function(data,D,maxit=5000)
+fa2<-function(data,D,maxit=5000,eta=0,fixrotat=FALSE)
 {
   nitems<-ncol(data)
   bifreq<-compute_bifreq(data)
@@ -28,7 +92,15 @@ fa2<-function(data,D,maxit=5000)
   intercepts<-rep(NA,nitems)
   for (i in 1:nitems) intercepts[i]<- -qnorm(mean(data[,i]))
   param<-rbind(load,intercepts)
-  opt<-optim(par=as.vector(param),fn=lik_fa2Rcpp,gr=grad_lik_fa2Rcpp,bifreq=bifreq,nitems=nitems,D=D,control = list(maxit=maxit),method="BFGS")
+  opt<-optim(par=as.vector(param),fn=lik_fa2Rcpp,gr=grad_lik_fa2Rcpp,bifreq=bifreq,nitems=nitems,D=D,control = list(maxit=maxit),method="BFGS",eta=eta,fixrotat=fixrotat)
+  opt$par<-matrix(opt$par,D+1,nitems)
+  if (fixrotat)
+  {
+    uptri<-upper.tri(matrix(NA,D,D))
+    uptri<-cbind(matrix(FALSE,D,nitems-D),uptri)
+    uptri<-rbind(uptri,FALSE)
+    opt$par[uptri]<-0
+  }
   opt
 }
 
@@ -56,9 +128,8 @@ compute_bifreq<-function(data)
 
 
 
-
-
-lvmboost <- function(data=NULL,trace=TRUE,nu=0.05,tau=2,Dmax=5,kstop=100,obj.lvmboost=NULL,nfreepar=TRUE)
+lvmboost <- function(data=NULL,trace=TRUE,nu=0.05,tau=2,Dmax=ncol(data)-1,kstop=100,
+                     obj.lvmboost=NULL,nfreepar=TRUE,eta=0)
 {
   if (is.null(data) & is.null(obj.lvmboost)) stop("argument data is NULL")
   if (is.null(obj.lvmboost))
@@ -88,15 +159,17 @@ lvmboost <- function(data=NULL,trace=TRUE,nu=0.05,tau=2,Dmax=5,kstop=100,obj.lvm
     parall[[count]]<-par0mat
     ll<-lik_fa2Rcpp(par=par0,bifreq=bifreq,nitems=nitems,D=D)
     loglik[[count]]<-ll
-    count<-count+1
     
     # =======================================================
     # start with all slopes of first dimension equal to zero
     # and determine which ones move from zero
     # =======================================================
-    der<-der_lik_fa2Rcpp(par=par0,bifreq=bifreq,nitems=nitems,D=D)
+    der<-der_lik_fa2Rcpp(par=par0,bifreq=bifreq,nitems=nitems,D=D,eta=eta)
     gr<-as.vector(der$grad)
     hess<-der$hess
+    
+    count<-count+1
+    
     which_par<-seq(1,nitems*(D+1),by=D+1)
     
     dnc<-DirNegCurvRcpp(which_par=which_par,gr=gr,hess=hess)
@@ -110,6 +183,8 @@ lvmboost <- function(data=NULL,trace=TRUE,nu=0.05,tau=2,Dmax=5,kstop=100,obj.lvm
     parall[[count]]<-par0mat
     ll<-lik_fa2Rcpp(par=par0,bifreq=bifreq,nitems=nitems,D=D)
     loglik[[count]]<-ll
+    
+
     if (trace)
     {
       cat("\n") ; cat("iteration number: ",count,"\n")
@@ -127,6 +202,7 @@ lvmboost <- function(data=NULL,trace=TRUE,nu=0.05,tau=2,Dmax=5,kstop=100,obj.lvm
     nu<-obj.lvmboost$nu
     tau<-obj.lvmboost$tau
     Dmax<-obj.lvmboost$Dmax
+    eta<-obj.lvmboost$eta
     loglik<-obj.lvmboost$loglik
     parall<-obj.lvmboost$par
     count<-length(loglik)
@@ -151,17 +227,17 @@ lvmboost <- function(data=NULL,trace=TRUE,nu=0.05,tau=2,Dmax=5,kstop=100,obj.lvm
       par0<-as.vector(par0mat)
     }
 
-    der<-der_lik_fa2Rcpp(par=par0,bifreq=bifreq,nitems=nitems,D=D+Daug)
+    der<-der_lik_fa2Rcpp(par=par0,bifreq=bifreq,nitems=nitems,D=D+Daug,eta=eta)
     gr<-as.vector(der$grad)
     hess<-der$hess
-
+    
     # Newton direction
     nd <- DirNetwRcpp(gr,hess,escl=0)
     nwt_dir<-nd$direction
     val2<-nd$Delta_fz_min # decrese of objective function using the best Newton direction
     i_par_nd<-nd$i_par
     j_par_nd<-nd$j_par
-
+    
     # negative curvature direction
     which_par<-1:length(par0) # all parameters excluding intercepts
     interc<-seq(D+1+Daug,length(par0),by=D+1+Daug) # these are intercepts
@@ -187,8 +263,8 @@ lvmboost <- function(data=NULL,trace=TRUE,nu=0.05,tau=2,Dmax=5,kstop=100,obj.lvm
       {
         frac<-frac*0.1
         par1mat<-matrix(par1,ncol=nitems)
-        lambda<-par1mat[-nrow(par1mat),]
-        vy<-t(lambda)%*%lambda
+        Lambda<-par1mat[-nrow(par1mat),]
+        vy<-t(Lambda)%*%Lambda
         if (any(diag(vy)>1)) 
         {
           par1[c(i_par,j_par)]<-par0[c(i_par,j_par)]+eigenvector*nu*frac
@@ -263,8 +339,8 @@ lvmboost <- function(data=NULL,trace=TRUE,nu=0.05,tau=2,Dmax=5,kstop=100,obj.lvm
         {
           frac<-frac*0.1
           par1mat<-matrix(par1,ncol=nitems)
-          lambda<-par1mat[-nrow(par1mat),]
-          vy<-t(lambda)%*%lambda
+          Lambda<-par1mat[-nrow(par1mat),]
+          vy<-t(Lambda)%*%Lambda
           if (any(diag(vy)>1)) 
           {
             par1[c(i_par_nd,j_par_nd)]<-par0[c(i_par_nd,j_par_nd)]+nwt_dir*nu*frac
@@ -322,6 +398,7 @@ lvmboost <- function(data=NULL,trace=TRUE,nu=0.05,tau=2,Dmax=5,kstop=100,obj.lvm
       D<-nrow(par0mat)-1
       parall[[count]]<-par0mat
       ll<-lik_fa2Rcpp(par=par0,bifreq=bifreq,nitems=nitems,D=D)
+      
       loglik[[count]]<-ll
       count<-count+1
     }
@@ -335,7 +412,7 @@ lvmboost <- function(data=NULL,trace=TRUE,nu=0.05,tau=2,Dmax=5,kstop=100,obj.lvm
       message("max iterations reached \n")
       noconv<-FALSE
     }
-    if(mean(abs(gr))<0.001) {noconv<-FALSE; message("converged at iteration ",count,"\n")}
+    if(mean(abs(gr))<0.00001) {noconv<-FALSE; message("converged at iteration ",count,"\n")}
     if (nfreepar)
     {
       nest<-sum(par0mat[1:D,]!=0)
@@ -347,19 +424,21 @@ lvmboost <- function(data=NULL,trace=TRUE,nu=0.05,tau=2,Dmax=5,kstop=100,obj.lvm
     }
   }
   colnames(par0mat)<-item_names
-  out<-list(parfin=par0mat,par=parall,loglik=unlist(loglik),D=D,nu=nu,tau=tau,Dmax=Dmax,bifreq=bifreq,data=data)
+  out<-list(parfin=par0mat,par=parall,loglik=unlist(loglik),D=D,nu=nu,tau=tau,Dmax=Dmax,
+            eta=eta,bifreq=bifreq,data=data)
   class(out)<-"lvmboost"
   return(out)
 }
 
 
 
-cv.lvmboost<-function(obj.lvmboost, K=5, trace=TRUE)
+cv.lvmboost<-function(obj.lvmboost, K=5, trace=TRUE, seed=1)
 {
   data<-obj.lvmboost$data
   n <- nrow(data)
   # the following for excluding subsets with columns all 0 or all 1
   all01 <- TRUE
+  set.seed(seed)
   while (all01) {
     all01_tmp <- FALSE
     gr <- split(sample(n, n, replace = FALSE), as.factor(1:K)) # generation of subsets for CROSS VALIDATION
@@ -381,8 +460,11 @@ cv.lvmboost<-function(obj.lvmboost, K=5, trace=TRUE)
     validation_set <- data[gr[[k]],]
     bifreq_validation<-compute_bifreq(validation_set)
     suppressMessages(
-    res_k<-lvmboost(training_set,kstop=kstop,nu=obj.lvmboost$nu,Dmax=obj.lvmboost$Dmax,tau=obj.lvmboost$tau,trace=FALSE,nfreepar=FALSE)
+    res_k<-lvmboost(training_set,kstop=kstop,nu=obj.lvmboost$nu,Dmax=obj.lvmboost$Dmax,
+                    tau=obj.lvmboost$tau,eta=obj.lvmboost$eta,
+                    trace=FALSE,nfreepar=FALSE)
     )
+    
     for (i in 1:length(res_k$par))
     {
       parmat<-res_k$par[[i]]

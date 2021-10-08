@@ -175,12 +175,17 @@ arma::mat bi_prob_Rcpp(double tau_i, double tau_j, arma::mat vary_ij)
 
 
 // [[Rcpp::export]]
-double lik_fa2Rcpp(arma::vec par, List bifreq, int nitems, int D)
+double lik_fa2Rcpp(arma::vec par, List bifreq, int nitems, int D, double eta=0.0, bool fixrotat=false)
 {
   arma::mat parmat = arma::conv_to<arma::mat>::from(par);
   parmat.reshape(D+1,nitems);
   arma::mat thresholds=parmat.row(D);
   arma::mat Lambda = parmat.rows(0,D-1);
+  if (fixrotat)
+  {
+    arma::uvec upper_indices = trimatu_ind(size(Lambda),nitems-D+1);
+    Lambda(upper_indices)*=0.0;
+  }
   arma::mat varf;
   varf = Lambda.t() * Lambda;
   arma::mat vary=varf;
@@ -202,17 +207,32 @@ double lik_fa2Rcpp(arma::vec par, List bifreq, int nitems, int D)
       loglik += lij;
     }
   }
+  if (eta>0)
+  {
+    arma::mat Lambda2 = square(Lambda);
+    arma::mat Lambda2sum = sum(Lambda2,1);//rowSums->sum_j
+    Lambda2sum += 0.01;
+    arma::mat Lambda2sum_sqrt = sqrt(Lambda2sum);
+    arma::mat pen = sum(Lambda2sum_sqrt,0);//colSums->sum_d
+    double penalty=pen(0,0);
+    loglik-=eta*penalty;
+  }
   return(-loglik);
 }
 
 
 // [[Rcpp::export]]
-arma::mat grad_lik_fa2Rcpp(arma::vec par,List bifreq,int nitems,int D)
+arma::mat grad_lik_fa2Rcpp(arma::vec par,List bifreq,int nitems,int D, double eta=0,bool fixrotat=false)
 {
   arma::mat parmat = arma::conv_to<arma::mat>::from(par);
   parmat.reshape(D+1,nitems);
   arma::mat thresholds=parmat.row(D);
   arma::mat Lambda = parmat.rows(0,D-1);
+  if (fixrotat)
+  {
+    arma::uvec upper_indices = trimatu_ind(size(Lambda),nitems-D+1);
+    Lambda(upper_indices)*=0.0;
+  }
   arma::mat varf;
   varf = Lambda.t() * Lambda;
   arma::mat vary=varf;
@@ -270,6 +290,24 @@ arma::mat grad_lik_fa2Rcpp(arma::vec par,List bifreq,int nitems,int D)
   }
   der_rho += der_rho.t();
   der1.rows(0,D-1) = Lambda * der_rho;
+  if (eta>0)
+  {
+    // first derivatives
+    arma::mat Lambda2 = square(Lambda);
+    arma::mat Lambda2sum = sum(Lambda2,1);//rowSums
+    Lambda2sum += 0.01;
+    arma::mat Lambda2sum_sqrt = sqrt(Lambda2sum);
+    arma::mat penaltyder=Lambda;
+    for (int d=0; d<D; d++)
+      penaltyder.row(d)/=Lambda2sum_sqrt(d);
+    der1.rows(0,D-1) -= eta*penaltyder;
+  }
+  if (fixrotat)
+  {
+    arma::uvec upper_indices = trimatu_ind(size(der1),nitems-D+1);
+    der1(upper_indices)*=0.0;
+  }
+  
   return(-der1);
 }
 
@@ -278,7 +316,7 @@ arma::mat grad_lik_fa2Rcpp(arma::vec par,List bifreq,int nitems,int D)
 
 
 // [[Rcpp::export]]
-List der_lik_fa2Rcpp(arma::vec par,List bifreq,int nitems,int D)
+List der_lik_fa2Rcpp(arma::vec par,List bifreq,int nitems,int D, double eta=0.0)
 {
   arma::mat parmat = arma::conv_to<arma::mat>::from(par);
   parmat.reshape(D+1,nitems);
@@ -436,6 +474,31 @@ List der_lik_fa2Rcpp(arma::vec par,List bifreq,int nitems,int D)
   der2(nointer,intercepts) = der2_lambda_tau.t();
   der2(nointer,nointer) = der2_lambda;
   
+  if (eta>0)
+  {
+    // first derivatives
+    arma::mat Lambda2 = square(Lambda);
+    arma::mat Lambda2sum = sum(Lambda2+0.001,0);//colSums
+    arma::mat Lambda2sum_sqrt = sqrt(Lambda2sum);
+    arma::mat penaltyder=Lambda;
+    for (int d=0; d<D; d++)
+      penaltyder.col(d)/=Lambda2sum_sqrt(d);
+    arma::mat penaltydervec = reshape(penaltyder.t(),D*nitems,1);
+    der1.rows(nointer) -= eta*penaltydervec;
+    
+    // second derivatives
+    arma::mat Lambda2sum_m1p5 = pow(Lambda2sum,-1.5);
+    arma::mat Lambdavec = reshape(Lambda.t(),D*nitems,1);
+    arma::mat LambdaLambda = Lambdavec * Lambdavec.t();
+    arma::mat diagD(D, D, arma::fill::eye);
+    arma::mat desnmat = repmat(diagD,nitems,nitems);
+    LambdaLambda %= desnmat;
+    arma::mat Lambda2sum_m1p5_desn = repmat(diagmat(Lambda2sum_m1p5),nitems,nitems);
+    arma::mat penaltyder2 = - LambdaLambda % Lambda2sum_m1p5_desn;
+    penaltyder2.diag() += 1/ repmat(Lambda2sum_sqrt,1,nitems);
+    der2(nointer,nointer) -= eta * penaltyder2;
+  }
+
   return List::create(
     _["grad"] = -der1,
     _["hess"] = -der2
@@ -443,6 +506,44 @@ List der_lik_fa2Rcpp(arma::vec par,List bifreq,int nitems,int D)
 }
 
 
+
+
+
+
+// [[Rcpp::export]]
+arma::mat NormalOgiveLikRcpp(arma::vec par, arma::mat data, arma::mat nodes, 
+                             arma::vec weights, arma::mat numpatt, int D=1, bool fixrotat=false)
+{
+  int nitems = data.n_cols;
+  int nq = nodes.n_rows;
+  
+  arma::mat parmat = arma::conv_to<arma::mat>::from(par);
+  parmat.reshape(D+1,nitems);
+  
+  if (fixrotat)
+  {
+    arma::uvec upper_indices = trimatu_ind(size(parmat),nitems-D+1);
+    parmat(upper_indices)*=0.0;
+  }
+
+  arma::mat onesmat = arma::ones<arma::mat>(nq,1);
+  arma::mat uno_nodes = join_rows(nodes, onesmat);//cbind
+  arma::mat prob = uno_nodes*parmat;
+  prob.for_each( [](arma::mat::elem_type& val) { val = ::Rf_pnorm5(val, 0.0, 1.0, 1, 0); } );
+  
+  arma::mat probt = prob.t();
+  arma::uvec ids = find(probt >= 1-1.4e-07);
+  probt.elem(ids).fill(1-1.4e-07);
+  ids = find(probt <= 1.4e-07);
+  probt.elem(ids).fill(1.4e-07);
+  
+  arma::mat prodj= exp(data*log(probt)+(1-data)*log(1-probt));
+  
+  arma::mat logsumq = log(prodj * weights) ;
+  arma::mat mlik =  - sum(logsumq%numpatt);
+  
+  return mlik;
+}
 
 
 

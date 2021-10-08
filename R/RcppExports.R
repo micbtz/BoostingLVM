@@ -13,15 +13,19 @@ bi_prob_Rcpp <- function(tau_i, tau_j, vary_ij) {
     .Call(`_BoostingLVM_bi_prob_Rcpp`, tau_i, tau_j, vary_ij)
 }
 
-lik_fa2Rcpp <- function(par, bifreq, nitems, D) {
-    .Call(`_BoostingLVM_lik_fa2Rcpp`, par, bifreq, nitems, D)
+lik_fa2Rcpp <- function(par, bifreq, nitems, D, eta = 0.0, fixrotat = FALSE) {
+    .Call(`_BoostingLVM_lik_fa2Rcpp`, par, bifreq, nitems, D, eta, fixrotat)
 }
 
-grad_lik_fa2Rcpp <- function(par, bifreq, nitems, D) {
-    .Call(`_BoostingLVM_grad_lik_fa2Rcpp`, par, bifreq, nitems, D)
+grad_lik_fa2Rcpp <- function(par, bifreq, nitems, D, eta = 0, fixrotat = FALSE) {
+    .Call(`_BoostingLVM_grad_lik_fa2Rcpp`, par, bifreq, nitems, D, eta, fixrotat)
 }
 
-der_lik_fa2Rcpp <- function(par, bifreq, nitems, D) {
-    .Call(`_BoostingLVM_der_lik_fa2Rcpp`, par, bifreq, nitems, D)
+der_lik_fa2Rcpp <- function(par, bifreq, nitems, D, eta = 0.0) {
+    .Call(`_BoostingLVM_der_lik_fa2Rcpp`, par, bifreq, nitems, D, eta)
+}
+
+NormalOgiveLikRcpp <- function(par, data, nodes, weights, numpatt, D = 1L, fixrotat = FALSE) {
+    .Call(`_BoostingLVM_NormalOgiveLikRcpp`, par, data, nodes, weights, numpatt, D, fixrotat)
 }
 

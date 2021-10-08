@@ -6,6 +6,11 @@
 
 using namespace Rcpp;
 
+#ifdef RCPP_USE_GLOBAL_ROSTREAM
+Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
+Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
+#endif
+
 // DirNegCurvRcpp
 List DirNegCurvRcpp(arma::vec which_par, arma::vec gr, arma::mat hess);
 RcppExport SEXP _BoostingLVM_DirNegCurvRcpp(SEXP which_parSEXP, SEXP grSEXP, SEXP hessSEXP) {
@@ -46,8 +51,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // lik_fa2Rcpp
-double lik_fa2Rcpp(arma::vec par, List bifreq, int nitems, int D);
-RcppExport SEXP _BoostingLVM_lik_fa2Rcpp(SEXP parSEXP, SEXP bifreqSEXP, SEXP nitemsSEXP, SEXP DSEXP) {
+double lik_fa2Rcpp(arma::vec par, List bifreq, int nitems, int D, double eta, bool fixrotat);
+RcppExport SEXP _BoostingLVM_lik_fa2Rcpp(SEXP parSEXP, SEXP bifreqSEXP, SEXP nitemsSEXP, SEXP DSEXP, SEXP etaSEXP, SEXP fixrotatSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -55,13 +60,15 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< List >::type bifreq(bifreqSEXP);
     Rcpp::traits::input_parameter< int >::type nitems(nitemsSEXP);
     Rcpp::traits::input_parameter< int >::type D(DSEXP);
-    rcpp_result_gen = Rcpp::wrap(lik_fa2Rcpp(par, bifreq, nitems, D));
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< bool >::type fixrotat(fixrotatSEXP);
+    rcpp_result_gen = Rcpp::wrap(lik_fa2Rcpp(par, bifreq, nitems, D, eta, fixrotat));
     return rcpp_result_gen;
 END_RCPP
 }
 // grad_lik_fa2Rcpp
-arma::mat grad_lik_fa2Rcpp(arma::vec par, List bifreq, int nitems, int D);
-RcppExport SEXP _BoostingLVM_grad_lik_fa2Rcpp(SEXP parSEXP, SEXP bifreqSEXP, SEXP nitemsSEXP, SEXP DSEXP) {
+arma::mat grad_lik_fa2Rcpp(arma::vec par, List bifreq, int nitems, int D, double eta, bool fixrotat);
+RcppExport SEXP _BoostingLVM_grad_lik_fa2Rcpp(SEXP parSEXP, SEXP bifreqSEXP, SEXP nitemsSEXP, SEXP DSEXP, SEXP etaSEXP, SEXP fixrotatSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -69,13 +76,15 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< List >::type bifreq(bifreqSEXP);
     Rcpp::traits::input_parameter< int >::type nitems(nitemsSEXP);
     Rcpp::traits::input_parameter< int >::type D(DSEXP);
-    rcpp_result_gen = Rcpp::wrap(grad_lik_fa2Rcpp(par, bifreq, nitems, D));
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< bool >::type fixrotat(fixrotatSEXP);
+    rcpp_result_gen = Rcpp::wrap(grad_lik_fa2Rcpp(par, bifreq, nitems, D, eta, fixrotat));
     return rcpp_result_gen;
 END_RCPP
 }
 // der_lik_fa2Rcpp
-List der_lik_fa2Rcpp(arma::vec par, List bifreq, int nitems, int D);
-RcppExport SEXP _BoostingLVM_der_lik_fa2Rcpp(SEXP parSEXP, SEXP bifreqSEXP, SEXP nitemsSEXP, SEXP DSEXP) {
+List der_lik_fa2Rcpp(arma::vec par, List bifreq, int nitems, int D, double eta);
+RcppExport SEXP _BoostingLVM_der_lik_fa2Rcpp(SEXP parSEXP, SEXP bifreqSEXP, SEXP nitemsSEXP, SEXP DSEXP, SEXP etaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -83,7 +92,25 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< List >::type bifreq(bifreqSEXP);
     Rcpp::traits::input_parameter< int >::type nitems(nitemsSEXP);
     Rcpp::traits::input_parameter< int >::type D(DSEXP);
-    rcpp_result_gen = Rcpp::wrap(der_lik_fa2Rcpp(par, bifreq, nitems, D));
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    rcpp_result_gen = Rcpp::wrap(der_lik_fa2Rcpp(par, bifreq, nitems, D, eta));
+    return rcpp_result_gen;
+END_RCPP
+}
+// NormalOgiveLikRcpp
+arma::mat NormalOgiveLikRcpp(arma::vec par, arma::mat data, arma::mat nodes, arma::vec weights, arma::mat numpatt, int D, bool fixrotat);
+RcppExport SEXP _BoostingLVM_NormalOgiveLikRcpp(SEXP parSEXP, SEXP dataSEXP, SEXP nodesSEXP, SEXP weightsSEXP, SEXP numpattSEXP, SEXP DSEXP, SEXP fixrotatSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::vec >::type par(parSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type nodes(nodesSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type numpatt(numpattSEXP);
+    Rcpp::traits::input_parameter< int >::type D(DSEXP);
+    Rcpp::traits::input_parameter< bool >::type fixrotat(fixrotatSEXP);
+    rcpp_result_gen = Rcpp::wrap(NormalOgiveLikRcpp(par, data, nodes, weights, numpatt, D, fixrotat));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -92,9 +119,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_BoostingLVM_DirNegCurvRcpp", (DL_FUNC) &_BoostingLVM_DirNegCurvRcpp, 3},
     {"_BoostingLVM_DirNetwRcpp", (DL_FUNC) &_BoostingLVM_DirNetwRcpp, 3},
     {"_BoostingLVM_bi_prob_Rcpp", (DL_FUNC) &_BoostingLVM_bi_prob_Rcpp, 3},
-    {"_BoostingLVM_lik_fa2Rcpp", (DL_FUNC) &_BoostingLVM_lik_fa2Rcpp, 4},
-    {"_BoostingLVM_grad_lik_fa2Rcpp", (DL_FUNC) &_BoostingLVM_grad_lik_fa2Rcpp, 4},
-    {"_BoostingLVM_der_lik_fa2Rcpp", (DL_FUNC) &_BoostingLVM_der_lik_fa2Rcpp, 4},
+    {"_BoostingLVM_lik_fa2Rcpp", (DL_FUNC) &_BoostingLVM_lik_fa2Rcpp, 6},
+    {"_BoostingLVM_grad_lik_fa2Rcpp", (DL_FUNC) &_BoostingLVM_grad_lik_fa2Rcpp, 6},
+    {"_BoostingLVM_der_lik_fa2Rcpp", (DL_FUNC) &_BoostingLVM_der_lik_fa2Rcpp, 5},
+    {"_BoostingLVM_NormalOgiveLikRcpp", (DL_FUNC) &_BoostingLVM_NormalOgiveLikRcpp, 7},
     {NULL, NULL, 0}
 };
 
